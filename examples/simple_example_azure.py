@@ -33,10 +33,21 @@ async def main():
     allowed_entities = ["Person", "Organization", "Location"]
 
     # 4. Extract entities and relationships
-    result_azure = await ms_graph_azure.extract_nodes_and_rels(example_texts, allowed_entities)
+    # You can specify a database for write operations
+    result_azure = await ms_graph_azure.extract_nodes_and_rels(example_texts, allowed_entities, write_database="neo4j")
     print("Azure OpenAI Result:", result_azure)
 
-    # 5. Close the connection
+    # 5. Generate summaries for nodes and relationships
+    # You can specify separate databases for read and write operations
+    result_summarize = await ms_graph_azure.summarize_nodes_and_rels(read_database="neo4j", write_database="neo4j")
+    print("Summarize Result:", result_summarize)
+
+    # 6. Identify and summarize communities
+    # You can specify separate databases for read and write operations
+    result_communities = await ms_graph_azure.summarize_communities(read_database="neo4j", write_database="neo4j")
+    print("Communities Result:", result_communities)
+
+    # 7. Close the connection
     ms_graph_azure.close()
 
 if __name__ == "__main__":

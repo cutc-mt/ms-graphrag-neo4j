@@ -134,6 +134,7 @@ class MsGraphRAG:
         self,
         input_texts: list,
         allowed_entities: list,
+        write_database: Optional[str] = None,
     ) -> str:
         """
         Extract nodes and relationships from input texts using LLM and store them in Neo4j.
@@ -202,13 +203,14 @@ class MsGraphRAG:
             self.query(
                 import_nodes_query,
                 params={"text": text, "chunk_id": get_hash(text), "data": nodes},
+                database=write_database,
             )
             # Import relationships
-            self.query(import_relationships_query, params={"data": relationships})
+            self.query(import_relationships_query, params={"data": relationships}, database=write_database)
 
         return f"Successfuly extracted and imported {total_relationships} relationships"
 
-    async def summarize_nodes_and_rels(self) -> str:
+    async def summarize_nodes_and_rels(self, read_database: Optional[str] = None, write_database: Optional[str] = None) -> str:
         """
         Generate summaries for all nodes and relationships in the graph.
 
@@ -221,7 +223,7 @@ class MsGraphRAG:
             - Stores summarized properties in the graph
         """
         # Summarize nodes
-        nodes = self.query(candidate_nodes_summarization)
+        nodes = self.query(candidate_nodes_summarization, database=read_database)
 
         async def process_node(node):
             messages = [
@@ -254,7 +256,7 @@ class MsGraphRAG:
             )
 
         # Summarize relationships
-        rels = self.query(candidate_rels_summarization)
+        rels = self.query(candidate_rels_summarization, database=read_database)
 
         async def process_rel(rel):
             entity_name = f"{rel['source']} relationship to {rel['target']}"
@@ -292,16 +294,16 @@ class MsGraphRAG:
             )
 
         # Import nodes
-        self.query(import_entity_summary, params={"data": summaries})
-        self.query(import_entity_summary_single)
+        self.query(import_entity_summary, params={"data": summaries}, database=write_database)
+        self.query(import_entity_summary_single, database=write_database)
 
         # Import relationships
-        self.query(import_rel_summary, params={"data": rel_summaries})
-        self.query(import_rel_summary_single)
+        self.query(import_rel_summary, params={"data": rel_summaries}, database=write_database)
+        self.query(import_rel_summary_single, database=write_database)
 
         return "Successfuly summarized nodes and relationships"
 
-    async def summarize_communities(self, summarize_all_levels: bool = False) -> str:
+    async def summarize_communities(self, summarize_all_levels: bool = False, read_database: Optional[str] = None, write_database: Optional[str] = None) -> str:
         """
         Detect and summarize communities within the graph using the Leiden algorithm.
 
@@ -319,22 +321,22 @@ class MsGraphRAG:
             - The community summaries include key entities, relationships, and themes
         """
         # Calculate communities
-        self.query(drop_gds_graph_query)
-        self.query(create_gds_graph_query)
-        community_summary = self.query(leiden_query)
+        self.query(drop_gds_graph_query, database=write_database)
+        self.query(create_gds_graph_query, database=write_database)
+        community_summary = self.query(leiden_query, database=write_database)
         community_levels = community_summary[0]["ranLevels"]
         print(
             f"Leiden algorithm identified {community_levels} community levels "
             f"with {community_summary[0]['communityCount']} communities on the last level."
         )
-        self.query(community_hierarchy_query)
+        self.query(community_hierarchy_query, database=write_database)
 
         # Community summarization
         if summarize_all_levels:
             levels = list(range(community_levels))
         else:
             levels = [community_levels - 1]
-        communities = self.query(community_info_query, params={"levels": levels})
+        communities = self.query(community_info_query, params={"levels": levels}, database=read_database)
 
         # Define async function for processing a single community
         async def process_community(community):
@@ -379,7 +381,7 @@ class MsGraphRAG:
                 total=len(communities),
             )
 
-        self.query(import_community_summary, params={"data": community_summary})
+        self.query(import_community_summary, params={"data": community_summary}, database=write_database)
         return f"Generated {len(community_summary)} community summaries"
 
     def _check_driver_state(self) -> None:
@@ -399,6 +401,7 @@ class MsGraphRAG:
         query: str,
         params: dict = {},
         session_params: dict = {},
+        database: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Query Neo4j database.
 
