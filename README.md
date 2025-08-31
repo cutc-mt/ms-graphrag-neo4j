@@ -28,6 +28,8 @@ The implementation uses OpenAI's models for text processing and Neo4j's powerful
 - **Community Detection**: Use Neo4j GDS to identify clusters of related information
 - **Community Summarization**: Provide high-level descriptions of concept clusters
 - **Neo4j Integration**: Seamless integration with Neo4j database for persistent storage
+- **Azure OpenAI Support**: Use Azure OpenAI Service for LLM interactions.
+- **Neo4j Database Separation**: Specify different Neo4j databases for read and write operations.
 
 ## Installation
 
@@ -40,53 +42,77 @@ pip install -e .
 - Neo4j database (5.26+)
 - APOC plugin installed in Neo4j
 - Graph Data Science (GDS) library installed in Neo4j
-- OpenAI API key
+- OpenAI API key (or Azure OpenAI credentials)
 
 ## Quick Start
 
 ```python
 import os
-
+import asyncio
 from ms_graphrag_neo4j import MsGraphRAG
 from neo4j import GraphDatabase
+from dotenv import load_dotenv
 
-# Set your environment variables
-os.environ["OPENAI_API_KEY"] = "your-openai-api-key"
-os.environ["NEO4J_URI"] = "bolt://localhost:7687"
-os.environ["NEO4J_USERNAME"] = "neo4j"
-os.environ["NEO4J_PASSWORD"] = "password"
+# Load environment variables from .env file
+load_dotenv()
 
-# Connect to Neo4j
-driver = GraphDatabase.driver(
-    os.environ["NEO4J_URI"], 
-    auth=(os.environ["NEO4J_USERNAME"], os.environ["NEO4J_PASSWORD"])
-)
+async def main():
+    # Set your environment variables (or use .env file)
+    # os.environ["OPENAI_API_KEY"] = "your-openai-api-key"
+    # os.environ["NEO4J_URI"] = "bolt://localhost:7687"
+    # os.environ["NEO4J_USERNAME"] = "neo4j"
+    # os.environ["NEO4J_PASSWORD"] = "password"
 
-# Initialize MsGraphRAG
-ms_graph = MsGraphRAG(driver=driver, model='gpt-4o')
+    # For Azure OpenAI:
+    # os.environ["AZURE_OPENAI_ENDPOINT"] = "your-azure-openai-endpoint"
+    # os.environ["AZURE_OPENAI_DEPLOYMENT"] = "your-azure-openai-deployment"
+    # os.environ["AZURE_OPENAI_API_VERSION"] = "your-azure-openai-api-version"
+    # os.environ["AZURE_OPENAI_API_KEY"] = "your-azure-openai-api-key"
 
-# Define example texts and entity types
-example_texts = [
-    "Tomaz works for Neo4j",
-    "Tomaz lives in Grosuplje", 
-    "Tomaz went to school in Grosuplje"
-]
-allowed_entities = ["Person", "Organization", "Location"]
+    # Connect to Neo4j
+    driver = GraphDatabase.driver(
+        os.environ["NEO4J_URI"], 
+        auth=(os.environ["NEO4J_USERNAME"], os.environ["NEO4J_PASSWORD"])
+    )
 
-# Extract entities and relationships
-result = ms_graph.extract_nodes_and_rels(example_texts, allowed_entities)
-print(result)
+    # Initialize MsGraphRAG (choose one):
+    # Standard OpenAI
+    # ms_graph = MsGraphRAG(driver=driver, model='gpt-4o')
 
-# Generate summaries for nodes and relationships
-result = ms_graph.summarize_nodes_and_rels()
-print(result)
+    # Azure OpenAI
+    ms_graph = MsGraphRAG(
+        driver=driver,
+        azure_openai_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
+        azure_openai_deployment=os.environ.get("AZURE_OPENAI_DEPLOYMENT"),
+        azure_openai_api_version=os.environ.get("AZURE_OPENAI_API_VERSION"),
+        openai_api_key=os.environ.get("AZURE_OPENAI_API_KEY")
+    )
 
-# Identify and summarize communities
-result = ms_graph.summarize_communities()
-print(result)
+    # Define example texts and entity types
+    example_texts = [
+        "Tomaz works for Neo4j",
+        "Tomaz lives in Grosuplje", 
+        "Tomaz went to school in Grosuplje"
+    ]
+    allowed_entities = ["Person", "Organization", "Location"]
 
-# Close the connection
-ms_graph.close()
+    # Extract entities and relationships (specify write_database if needed)
+    result = await ms_graph.extract_nodes_and_rels(example_texts, allowed_entities, write_database="neo4j")
+    print(result)
+
+    # Generate summaries for nodes and relationships (specify read/write_database if needed)
+    result = await ms_graph.summarize_nodes_and_rels(read_database="neo4j", write_database="neo4j")
+    print(result)
+
+    # Identify and summarize communities (specify read/write_database if needed)
+    result = await ms_graph.summarize_communities(read_database="neo4j", write_database="neo4j")
+    print(result)
+
+    # Close the connection
+    ms_graph.close()
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 ## How It Works
