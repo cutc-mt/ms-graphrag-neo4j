@@ -104,9 +104,9 @@ class MsGraphRAG:
             self._openai_client = AsyncOpenAI(
                 api_key=openai_api_key or os.environ.get("OPENAI_API_KEY")
             )
+            self.model = model
 
         self._driver = driver
-        self.model = model
         self.max_workers = max_workers
         self._database = database
         # Test for APOC
