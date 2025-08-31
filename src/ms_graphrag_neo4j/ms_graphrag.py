@@ -70,6 +70,10 @@ class MsGraphRAG:
         database: str = "neo4j",
         max_workers: int = 10,
         create_constraints: bool = True,
+        azure_openai_endpoint: Optional[str] = None,
+        azure_openai_deployment: Optional[str] = None,
+        azure_openai_api_version: Optional[str] = None,
+        openai_api_key: Optional[str] = None,
     ) -> None:
         """
         Initialize MsGraphRAG with Neo4j driver and LLM.
@@ -80,17 +84,32 @@ class MsGraphRAG:
             database (str, optional): Neo4j database name. Defaults to "neo4j".
             max_workers (int, optional): Maximum number of concurrent workers. Defaults to 10.
             create_constraints (bool, optional): Whether to create database constraints. Defaults to True.
+            azure_openai_endpoint (str, optional): Azure OpenAI endpoint. Defaults to None.
+            azure_openai_deployment (str, optional): Azure OpenAI deployment name. Defaults to None.
+            azure_openai_api_version (str, optional): Azure OpenAI API version. Defaults to None.
+            openai_api_key (str, optional): OpenAI API key. Defaults to None.
         """
-        if not os.environ.get("OPENAI_API_KEY"):
-            raise ValueError(
-                "You need to define the `OPENAI_API_KEY` environment variable"
+        if azure_openai_endpoint:
+            self._openai_client = AsyncOpenAI(
+                azure_endpoint=azure_openai_endpoint,
+                azure_deployment=azure_openai_deployment,
+                api_version=azure_openai_api_version,
+                api_key=openai_api_key,
+            )
+            self.model = azure_openai_deployment
+        else:
+            if not openai_api_key and not os.environ.get("OPENAI_API_KEY"):
+                raise ValueError(
+                    "You need to define the `OPENAI_API_KEY` environment variable or pass the `openai_api_key` parameter"
+                )
+            self._openai_client = AsyncOpenAI(
+                api_key=openai_api_key or os.environ.get("OPENAI_API_KEY")
             )
 
         self._driver = driver
         self.model = model
         self.max_workers = max_workers
         self._database = database
-        self._openai_client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         # Test for APOC
         try:
             self.query("CALL apoc.help('test')")
@@ -113,7 +132,9 @@ class MsGraphRAG:
             )
 
     async def extract_nodes_and_rels(
-        self, input_texts: list, allowed_entities: list
+        self,
+        input_texts: list,
+        allowed_entities: list,
     ) -> str:
         """
         Extract nodes and relationships from input texts using LLM and store them in Neo4j.
@@ -409,7 +430,7 @@ class MsGraphRAG:
             except Neo4jError as e:
                 if not (
                     (
-                        (  # isCallInTransactionError
+                        (
                             e.code == "Neo.DatabaseError.Statement.ExecutionFailed"
                             or e.code
                             == "Neo.DatabaseError.Transaction.TransactionStartFailed"
@@ -417,7 +438,7 @@ class MsGraphRAG:
                         and e.message is not None
                         and "in an implicit transaction" in e.message
                     )
-                    or (  # isPeriodicCommitError
+                    or (
                         e.code == "Neo.ClientError.Statement.SemanticError"
                         and e.message is not None
                         and (
