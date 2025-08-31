@@ -1,7 +1,7 @@
 import os
 from typing import Any, Dict, List, Optional, Type
 from neo4j import Driver
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, AsyncAzureOpenAI
 import asyncio
 
 
@@ -90,9 +90,8 @@ class MsGraphRAG:
             openai_api_key (str, optional): OpenAI API key. Defaults to None.
         """
         if azure_openai_endpoint:
-            self._openai_client = AsyncOpenAI(
+            self._openai_client = AsyncAzureOpenAI(
                 azure_endpoint=azure_openai_endpoint,
-                azure_deployment=azure_openai_deployment,
                 api_version=azure_openai_api_version,
                 api_key=openai_api_key,
             )
